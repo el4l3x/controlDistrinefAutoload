@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Competitor;
+use App\Models\Oportunidad;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
@@ -1577,14 +1578,18 @@ class GfcController extends Controller
         return $dt->toJson();
     }
 
-    public function oportunidadVentas() {        
+    public function oportunidadVentas() {       
+
         return view('gfc.oportunidades');
     }
 
     public function oportunidadContactar(Request $request, $idCart) {
 
-        $oportunidad = DB::connection('presta')->table('cart')
+        /* $oportunidad = DB::connection('presta')->table('cart')
             ->where('id_cart', $idCart)
+            ->update(['contactado' => 1, 'comentario' => $request->comment, 'fecha_contacto' => now()]); */
+
+        $oportunidad = Oportunidad::where('ps_cart_id', $idCart)
             ->update(['contactado' => 1, 'comentario' => $request->comment, 'fecha_contacto' => now()]);
 
         return redirect(route('gfc.oportunidad.ventas'));

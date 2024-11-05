@@ -74,7 +74,7 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',
-            'prefix' => env('PRESTA_PREFIX'),
+            'prefix' => env('PRESTA_PREFIX', 'ps_'),
             'prefix_indexes' => true,
             'strict' => false,
             'engine' => null,
