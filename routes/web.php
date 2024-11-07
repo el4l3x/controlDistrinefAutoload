@@ -65,6 +65,7 @@ Route::middleware([
         Route::post('/dashboard/rango-fechas', [GfcController::class, 'dashboard'])->name('gfc.dashboards.dates');
 
         Route::get('/mejores-productos', [GfcController::class, 'bestProducts'])->name('gfc.bestproducts');
+        Route::post('/mejores-productos/categorias', [GfcController::class, 'bestProductsCategories'])->name('gfc.bestProducts.categories');
         Route::post('/mejores-productos/rango-fechas', [GfcController::class, 'bestProducts'])->name('gfc.bestproducts.dates');
 
         Route::get('/monitor-precios', [GfcController::class, 'monPrice'])->name('gfc.monprice');
@@ -73,6 +74,7 @@ Route::middleware([
         Route::get('/oportunidad-ventas', [GfcController::class, 'oportunidadVentas'])->name('gfc.oportunidad.ventas');
         Route::post('/oportunidad/contactar/{id}', [GfcController::class, 'oportunidadContactar'])->name('gfc.oportunidad.contactar');
 
+        Route::post('datatable/mejores-categorias', [GfcController::class, 'datatableMejoresCategorys'])->name('gfc.datatable.bescategorys');
         Route::get('datatable/monitor-precios', [GfcController::class, 'datatable'])->name('gfc.datatable.monprice');
         Route::post('datatable/oportunidades-ventas', [DatatableController::class, 'datatableOportunidadesVentas'])->name('gfc.datatable.oportunidades.ventas');
         Route::get('datatable/mejores-productos', [GfcController::class, 'datatableMejoresProductos'])->name('gfc.datatable.bestproducts');

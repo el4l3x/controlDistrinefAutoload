@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BestProduct;
 use App\Models\Competitor;
 use App\Models\Oportunidad;
 use App\Models\Product;
@@ -553,7 +554,85 @@ class GfcController extends Controller
     }
 
     public function bestProducts(Request $request) {
-        $validator = Validator::make($request->all(), [
+        if (BestProduct::all()->count() > 0) {
+            $validator = Validator::make($request->all(), [
+                'start' => 'required|date',
+                'end' => 'required|date',
+            ]);
+    
+            if ($validator->fails()) {
+                $start = $request->session()->get('startBestsProducts', Carbon::yesterday());
+                $end = $request->session()->get('endBestsProducts', Carbon::now());
+            } else {
+                $start = $request->date('start')->format('Y-m-d H:i:s'); 
+                $end = $request->date('end')->format('Y-m-d H:i:s');
+
+                $request->session()->put('startBestsProducts', $start);
+                $request->session()->put('endBestsProducts', $end);
+            }
+
+            $categorys = BestProduct::select([
+                'parent_id',
+            ])->distinct('parent_id')->get();
+
+            $card = [];
+
+            //dump($categorys);
+
+            foreach ($categorys as $category) {
+
+                $nombreCategoria = BestProduct::select('categoria')
+                    ->where('categoria_id', $category->parent_id)
+                    ->where('parent_id', $category->parent_id)
+                    ->first();
+
+                //dump($category);
+
+                $queryCategory = BestProduct::select('categoria_id')->where('parent_id', $category->parent_id)->pluck('categoria_id')->toArray();
+
+                //dump($queryCategory);
+                
+                $blade = DB::connection('presta')->table('product')
+                    ->join('product_lang', function (JoinClause $joinClause) {
+                        $joinClause->on('product.id_product', '=', 'product_lang.id_product');
+                    })
+                    ->join('order_detail', function (JoinClause $joinClause) {
+                        $joinClause->on('product.id_product', '=', 'order_detail.product_id');
+                    })
+                    ->join('orders', function (JoinClause $joinClause) use ($start, $end) {
+                        $joinClause->on('orders.id_order', '=', 'order_detail.id_order');                
+                    })        
+                    ->select(
+                        'product.id_product',
+                        DB::raw('SUM('.env('PRESTA_PREFIX').'order_detail.product_quantity) as total_products'),
+                    )
+                    ->where('orders.valid', 1)
+                    ->whereBetween('orders.date_add', [$start, $end])
+                    ->whereIn('product.id_category_default', $queryCategory)
+                    ->groupBy('product.id_product')
+                    ->get();
+
+                $card[] = [
+                    'nombre'    => $nombreCategoria->categoria,
+                    'array'     => $queryCategory,
+                    'data'      => $blade,
+                ];
+            }
+
+            return view("gfc.best_products", [
+                "cards"  =>  $card,
+                "startDate" => Carbon::createFromDate($start)->format('d/m/Y'),
+                "endDate" => Carbon::createFromDate($end)->format('d/m/Y'),
+                "startDateFormat" => $start,
+                "endDateFormat" => $end,
+            ]);
+
+        } else {
+            return view('gfc.best_products.add_categories');
+        }
+        
+
+        /* $validator = Validator::make($request->all(), [
             'start' => 'required|date',
             'end' => 'required|date',
         ]);
@@ -896,7 +975,84 @@ class GfcController extends Controller
             "endDate" => Carbon::createFromDate($end)->format('d/m/Y'),
             "startDateFormat" => $start,
             "endDateFormat" => $end,
+        ]); */
+    }
+
+    public function bestProductsCategories(Request $request) {
+
+        $validated = $request->validate([
+            'categorias' => 'required|file|extensions:csv',
         ]);
+
+        if($request->file('categorias') && is_file($request->file('categorias'))){
+                $array_total = array();
+                $fp = fopen($request->file('categorias'),"r");
+                while ($data = fgetcsv($fp, 150, ';')){
+                    $num = count($data);
+                    $array_total[] = array_map("utf8_encode",$data);
+                }
+                fclose($fp);
+                $array_total;
+        }
+
+        $categoryDepth = DB::connection('presta')->table('category')->select([
+            'level_depth',
+        ])->where('active', 1)->max('level_depth');
+
+        foreach ($array_total as $fila => $columna) {
+            if ($fila > 0) {
+                $categoryPs = DB::connection('presta')->table('category')->select([
+                    'id_category',
+                    'level_depth',
+                ])->where('active', 1)
+                ->where('id_category', $columna[1])->first();
+                
+                DB::beginTransaction();
+
+                $parents = [];
+
+                if ($categoryPs) {
+                    $newCategory = BestProduct::upsert(
+                        ['categoria_id' => $columna[1], 'categoria' => $columna[0], 'parent_id' => $columna[1]],
+                        ['categoria' => $columna[0], 'parent_id' => $columna[1]]
+                    );                    
+
+                    $parents[] = $columna[1];
+
+                    for ($i=$categoryPs->level_depth; $i <= $categoryDepth; $i++) { 
+                        $subcategoryPs = DB::connection('presta')->table('category')->select([
+                            'id_category',
+                            'level_depth',
+                        ])->where('active', 1)
+                        ->whereIn('id_parent', $parents)->get();
+
+                        if ($subcategoryPs->count() > 0) {
+                            foreach ($subcategoryPs as $value) {                                
+
+                                $newCategory = BestProduct::upsert(
+                                    ['categoria_id' => $value->id_category, 'categoria' => 'subcategoria de '.$columna[0], 'parent_id' => $columna[1]],
+                                    ['categoria' => 'subcategoria de '.$columna[0], 'parent_id' => $columna[1]]
+                                );
+
+                                echo $value->id_category.'<br>';
+
+                                $parents[] = $value->id_category;
+                            }
+                        } else {
+                            break;
+                        }
+                        
+                    }
+                } else {
+                    echo 'La categoria '.$columna[0].' esta desactivada'; 
+                }
+                
+                DB::commit();
+            }
+        }
+
+        return redirect()->route('gfc.bestproducts');
+
     }
 
     public function monPrice() {
@@ -997,7 +1153,10 @@ class GfcController extends Controller
         $validator = Validator::make($request->all(), [
             'start' => 'required',
             'end' => 'required',
+            'prefix' => 'required',
         ]);
+
+        $prefix = $request->prefix;
  
         if ($validator->fails()) {
             $start = Carbon::yesterday();
@@ -1023,15 +1182,16 @@ class GfcController extends Controller
             'order_detail.product_name as Product_Name_Combination',
             'product_lang.name as Product_Name',
             'product_lang.link_rewrite as url_name',
-            DB::raw("count(".env('PRESTA_PREFIX')."order_detail.product_id) as ordered_qty"),
-            DB::raw('SUM('.env('PRESTA_PREFIX').'order_detail.product_quantity) as total_products'),
+            DB::raw("count(".$prefix."order_detail.product_id) as ordered_qty"),
+            DB::raw('SUM('.$prefix.'order_detail.product_quantity) as total_products'),
         )->groupBy('product.id_product')
         ->orderBy('total_products', 'DESC');
 
         $dt = DataTables::of($select)
             ->editColumn('Product_Name_Combination', function ($product) {
                 return view('gfc.products.datatables.nombre', [
-                    'url' => 'https://www.gasfriocalor.com/'.$product->url_name,
+                    //'url' => 'https://www.gasfriocalor.com/'.$product->url_name,
+                    'url' => '#',
                     'nombre'    => $product->Product_Name,
                 ]);
             });            
@@ -1039,6 +1199,77 @@ class GfcController extends Controller
         return $dt->toJson();
     }
 
+    public function datatableMejoresCategorys(Request $request) {
+
+        $validator = Validator::make($request->all(), [
+            'start' => 'required',
+            'end' => 'required',
+            'parent_category' => 'required',
+            'prefix' => 'required',
+        ]);
+
+        $array = $request->parent_category;
+ 
+        if ($validator->fails()) {
+            $start = Carbon::yesterday();
+            $end = Carbon::now()->addHours(23)->addMinutes(59)->addSeconds(59);
+        } else {
+            $start = $request->date('start'); 
+            $end = $request->date('end')->addHours(23)->addMinutes(59)->addSeconds(59);
+        }
+
+        //$prefix = env('PRESTA_PREFIX');
+        $prefix = $request->prefix;
+        $queryOne = 'COUNT('.$prefix.'order_detail.id_order) as ordered_qty';
+        $queryTwo = 'SUM('.$prefix.'order_detail.product_quantity) as total_products';
+        $queryThree = 'GROUP_CONCAT(DISTINCT '.$prefix.'orders.id_order ORDER BY '.$prefix.'orders.id_order SEPARATOR", ") as orders_ids';
+        //return $queryTwo;
+
+        $aires = DB::connection('presta')->table('product')
+        ->join('product_lang', function (JoinClause $joinClause) {
+            $joinClause->on('product.id_product', '=', 'product_lang.id_product');
+        })
+        ->join('order_detail', function (JoinClause $joinClause) {
+            $joinClause->on('product.id_product', '=', 'order_detail.product_id');
+        })
+        ->join('orders', function (JoinClause $joinClause) use ($start, $end) {
+            $joinClause->on('orders.id_order', '=', 'order_detail.id_order');                
+        })        
+        ->select([
+            'product.id_product',
+            'product.reference as SKU',
+            'order_detail.product_reference',
+            'order_detail.product_name as Product_Name_Combination',
+            'product_lang.name as Product_Name',
+            'product_lang.link_rewrite as url_name',
+            DB::raw($queryOne),
+            DB::raw($queryTwo),
+            DB::raw($queryThree),
+        ])
+        ->where('orders.valid', 1)
+        ->whereBetween('orders.date_add', [$start, $end])
+        ->whereIn('product.id_category_default', $array)
+        ->groupBy('product.id_product')
+        ->orderBy('total_products', 'DESC');
+
+        $dt = DataTables::of($aires)
+            ->editColumn('Product_Name_Combination', function ($product) {
+                return view('gfc.products.datatables.nombre', [
+                    'url' => 'https://www.gasfriocalor.com/'.$product->url_name,
+                    'nombre'    => $product->Product_Name,
+                ]);
+            })
+            ->editColumn('ordered_qty', function ($product) {
+                return view('gfc.products.datatables.pedidos', [
+                    'pedidos_count' => $product->ordered_qty,
+                    'pedidos_ids'    => $product->orders_ids,
+                    'nombre'    => $product->Product_Name,
+                ]);
+            });
+
+        return $dt->toJson();
+    }
+    
     public function datatableMejoresAires(Request $request) {
 
         $validator = Validator::make($request->all(), [

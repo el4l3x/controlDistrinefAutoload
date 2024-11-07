@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Gasfriocalor | Mejores Productos')
+@section('title', 'Mejores Productos')
 
 @section('content_header')
     <div class="row justify-content-between">
@@ -52,8 +52,9 @@
                                 'ajax'  => [
                                     'url'   => route('gfc.datatable.bestproducts'),
                                     'data'  =>   [
-                                        'start' => $startDateFormat,
-                                        'end'   => $endDateFormat,
+                                        'start'     => $startDateFormat,
+                                        'end'       => $endDateFormat,
+                                        'prefix'    => env('PRESTA_PREFIX'),
                                     ]
                                 ],
                                 'order' => [[3, 'desc']],
@@ -84,7 +85,76 @@
                 </div>    
             </div>
 
-            <div class="row mb-4">
+            <div class="row">
+
+                @foreach ($cards as $item)
+
+                    <div class="col-lg-6 col-md-12 mb-4">
+                        <div class="card card-custom">
+                        
+                            <div class="card-header border-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h2 class="card-title">{{ $item['nombre'] }} Mas Vendidos ({{ $item['data']->count() }} diferentes) - {{ $item['data']->sum('total_products') }} unidades totales</h2>
+                                </div>
+                            </div>
+
+                            <div class="card-body">
+
+                                @php
+                                $heads = [
+                                    ['label' => 'Ref', 'width' => 1],
+                                    'Nombre',
+                                    'Pedidos',
+                                    'Unidades',
+                                ];
+
+                                $config = [                                
+                                    'ajax'  => [
+                                        'url'   => route('gfc.datatable.bescategorys'),
+                                        'type' => 'POST',
+                                        'headers' => [
+                                            'X-CSRF-TOKEN'  => csrf_token()
+                                        ],
+                                        'data'  =>   [
+                                            'start' => $startDateFormat,
+                                            'end'   => $endDateFormat,
+                                            'parent_category'   => $item['array'],
+                                            'prefix'    => env('PRESTA_PREFIX'),
+                                        ]
+                                    ],
+                                    'order' => [[3, 'desc']],
+                                    'columns' => [
+                                        [
+                                            'data'  => "SKU",
+                                            'width' => '10px'
+                                        ], 
+                                        [
+                                            'data'  => "Product_Name_Combination",
+                                        ], 
+                                        [
+                                            'data'  => "ordered_qty",
+                                        ], 
+                                        [
+                                            'data'  => "total_products",
+                                        ]
+                                    ],
+                                    'language'  => [
+                                        'url'   => '//cdn.datatables.net/plug-ins/2.0.2/i18n/es-ES.json',
+                                    ],
+                                ];
+                                @endphp
+                                <x-adminlte-datatable id="datatable-{{ $loop->index }}" :heads="$heads" :config="$config" beautify striped hoverable with-buttons>
+                                </x-adminlte-datatable>
+
+                            </div>
+                        </div>    
+                    </div>
+                    
+                @endforeach
+
+            </div>            
+
+            {{-- <div class="row mb-4">
                 <div class="col-lg-6 col-md-12">
                     <div class="card card-custom">
                         
@@ -195,9 +265,9 @@
                         </div>
                     </div>    
                 </div>
-            </div>
+            </div> --}}
 
-            <div class="row mb-4">
+            {{-- <div class="row mb-4">
                 <div class="col-lg-6 col-md-12">
                     <div class="card card-custom">
                         
@@ -476,7 +546,7 @@
                         </div>
                     </div>    
                 </div>    
-            </div>
+            </div> --}}
 
         </div>
     </div>
